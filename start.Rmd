@@ -1,0 +1,26 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{r set_up}
+setwd("~/Downloads/5243_groupX")
+```
+
+```{r load_data}
+green_cab <- fread(input = "Data/2018_Green_Taxi_Trip_Data.csv")
+```
+
+```{r load_table}
+taxi_zone <- fread(input = "~/Downloads/2018_Green_Taxi_Trip_Data.csv")
+```
+
+```{r data_cleaning}
+
+```
