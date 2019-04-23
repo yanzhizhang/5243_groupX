@@ -6,3 +6,5 @@ https://docs.google.com/document/d/18ahviOk7gXAo5uYwgUoWS3cOGMJi4AKnt4BnvKBKemM/
 
 
 Link to data: https://data.cityofnewyork.us/Transportation/2018-Green-Taxi-Trip-Data/w7fs-fd9i
+
+Weather data: https://www.ncdc.noaa.gov/cdo-web/search
