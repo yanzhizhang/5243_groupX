@@ -21,7 +21,6 @@ dt <- fread( input = "../Data/pruned_green_cab.csv")
 
 ```
 
-dt[,.(pick_up = get(lpep_pickup_datetime))]
 ### drop unnecessary column
 ```{r transform date}
 dt$store_and_fwd_flag <- NULL
@@ -41,7 +40,7 @@ names(final_dt)
 selected_dt <- final_dt[, c("pickup_hour","dropoff_hour","RatecodeID","PULocationID","DOLocationID","passenger_count","trip_distance","extra","mta_tax","tolls_amount","improvement_surcharge", "payment_type","trip_type","weekday","fare_amount","tip_amount","N" ) ]
 ```
 
-```{r train test split}
+```{r train_test_split}
 #creating indices
 trainIndex <- createDataPartition(selected_dt[1:10000,]$N,p=0.75,list=FALSE)
 #splitting data into training/testing data using the trainIndex object
@@ -52,7 +51,7 @@ names(cab_TRAIN)
 
 ### target is fare_amount tip_amount demand(N)
 
-```{r load model library echo = FALSE}
+```{r load_model_library}
 library(data.table)
 library(DT)
 library(dplyr)
@@ -71,25 +70,25 @@ library(caret)
 ```
 
 ```{r linear_model}
-model_glm <- glmnet(x = as.matrix(cab_TRAIN[,-c(15,16,17)]),
-                y = as.matrix(cab_TRAIN[,c(17)]),
-                alpha = 1,
-                family = "gaussian")
-
-
-prediction <- predict(object = model_glm,
-                      newx = as.matrix(cab_TEST[,-c(15,16,17)]),
-                      type = "link")
+# model_glm <- glmnet(x = as.matrix(cab_TRAIN[,-c(15,16,17)]),
+#                 y = as.matrix(cab_TRAIN[,c(17)]),
+#                 alpha = 1,
+#                 family = "gaussian")
+# 
+# 
+# prediction <- predict(object = model_glm,
+#                       newx = as.matrix(cab_TEST[,-c(15,16,17)]),
+#                       type = "link")
 ```
 
 ```{r knn_r}
-model_knn <- knn.reg(cab_TRAIN, test = NULL, y, k = 3, algorithm=c("kd_tree", 
-        "cover_tree", "brute"))
-
-model_knn.reg <- knn.reg(train = cab_TRAIN[,-c(15,16,17)],
-                      test = cab_TEST[,-c(17)],
-                      cl = cab_TRAIN[,c(15,16,17)],
-                      k = K)
+# model_knn <- knn.reg(cab_TRAIN, test = NULL, y, k = 3, algorithm=c("kd_tree", 
+#         "cover_tree", "brute"))
+# 
+# model_knn.reg <- knn.reg(train = cab_TRAIN[,-c(15,16,17)],
+#                       test = cab_TEST[,-c(17)],
+#                       cl = cab_TRAIN[,c(15,16,17)],
+#                       k = K)
 ``
 
 
