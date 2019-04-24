@@ -7,51 +7,13 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+
 ### Train test split
 
-```{r package}
+```{r package echo = FALSE}
 library(DT)
 library(data.table)
 library(caret) #this package has the createDataPartition function
-```
-
-```{r load_data}
-set.seed(10)
-dt <- fread( input = "../Data/pruned_green_cab.csv")
-
-```
-
-### drop unnecessary column
-```{r transform date}
-dt$store_and_fwd_flag <- NULL
-dt$VendorID <- NULL
-
-# Monday is 1, Sunday is 0.
-dt$weekday <- dt$pickup_hour %% (24*7)
-
-# hourly density
-dt$demand <- dt$pickup_hour 
-
-final_dt <- merge(dt, dt[,.N, by = pickup_hour])
-```
-
-```{r feature_selection}
-names(final_dt)
-selected_dt <- final_dt[, c("pickup_hour","dropoff_hour","RatecodeID","PULocationID","DOLocationID","passenger_count","trip_distance","extra","mta_tax","tolls_amount","improvement_surcharge", "payment_type","trip_type","weekday","fare_amount","tip_amount","N" ) ]
-```
-
-```{r train_test_split}
-#creating indices
-trainIndex <- createDataPartition(selected_dt[1:10000,]$N,p=0.75,list=FALSE)
-#splitting data into training/testing data using the trainIndex object
-cab_TRAIN <- selected_dt[trainIndex,] #training data (75% of data) 
-cab_TEST <- selected_dt[-trainIndex,] #testing data (25% of data)
-names(cab_TRAIN)
-```
-
-### target is fare_amount tip_amount demand(N)
-
-```{r load_model_library}
 library(data.table)
 library(DT)
 library(dplyr)
@@ -69,30 +31,48 @@ library(klaR)
 library(caret)
 ```
 
+```{r load_data}
+set.seed(10)
+final_dt <- fread( input = "../Data/pruned_green_cab.csv")
+```
+
+
+```{r feature_selection}
+names(final_dt)
+selected_dt <- final_dt[, c("pickup_hour","dropoff_hour","RatecodeID","PULocationID","DOLocationID","passenger_count","trip_distance","extra","mta_tax","tolls_amount","improvement_surcharge", "payment_type","trip_type","weekday","fare_amount","tip_amount","N" ) ]
+```
+
+```{r train_test_split}
+temp_dt <- selected_dt[1:10000,]
+#creating indices
+trainIndex <- createDataPartition(temp_dt$N,p=0.75,list=FALSE)
+#splitting data into training/testing data using the trainIndex object
+cab_TRAIN <- temp_dt[trainIndex,] #training data (75% of data) 
+cab_TEST <- temp_dt[-trainIndex,] #testing data (25% of data)
+names(cab_TRAIN)
+```
+
+### target is fare_amount tip_amount demand(N)
+
+```{r load_model_library}
+
+```
+
 ```{r linear_model}
-# model_glm <- glmnet(x = as.matrix(cab_TRAIN[,-c(15,16,17)]),
-#                 y = as.matrix(cab_TRAIN[,c(17)]),
-#                 alpha = 1,
-#                 family = "gaussian")
-# 
-# 
-# prediction <- predict(object = model_glm,
-#                       newx = as.matrix(cab_TEST[,-c(15,16,17)]),
-#                       type = "link")
+linear <- lm(N~.,data=cab_TRAIN[,-c(15,16)])
+
+pred <- predict(linear,x=cab_TEST[,-c(15,16,17)])
+
+RMSE = sqrt( mean( (pred - unlist(cab_TEST[,17]))^2 ) )
 ```
 
 ```{r knn_r}
-# model_knn <- knn.reg(cab_TRAIN, test = NULL, y, k = 3, algorithm=c("kd_tree", 
-#         "cover_tree", "brute"))
-# 
-# model_knn.reg <- knn.reg(train = cab_TRAIN[,-c(15,16,17)],
-#                       test = cab_TEST[,-c(17)],
-#                       cl = cab_TRAIN[,c(15,16,17)],
-#                       k = K)
+model_knn <- knn.reg(cab_TRAIN, test = NULL, y, k = 3, algorithm=c("kd_tree",
+        "cover_tree", "brute"))
+
+model_knn.reg <- knn.reg(train = cab_TRAIN[,-c(15,16,17)],
+                      test = cab_TEST[,-c(17)],
+                      cl = cab_TRAIN[,c(15,16,17)],
+                      k = K)
 ``
-
-
-
-
-
 

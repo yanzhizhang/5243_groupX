@@ -145,17 +145,53 @@ one.year <- (as.numeric(strptime("01/01/2019 12:00:00 AM", "%m/%d/%Y %l:%M:%S %p
 pruned_green_cab$pickup_hour <- 
   (as.numeric(strptime(pruned_green_cab$lpep_pickup_datetime, "%m/%d/%Y %l:%M:%S %p")) - as.numeric(strptime("01/01/2018 12:00:00 AM", "%m/%d/%Y %l:%M:%S %p"))) %/% 3600
 
-pruned_green_cab$dropoff_hour <- (as.numeric(strptime(pruned_green_cab$lpep_dropoff_datetime, "%m/%d/%Y %l:%M:%S %p")) - as.numeric(strptime("01/01/2018 12:00:00 AM", "%m/%d/%Y %H:%M:%S %p"))) %/% 3600
+pruned_green_cab$dropoff_hour <- (as.numeric(strptime(pruned_green_cab$lpep_dropoff_datetime, "%m/%d/%Y %l:%M:%S %p")) - as.numeric(strptime("01/01/2018 12:00:00 AM", "%m/%d/%Y %l:%M:%S %p"))) %/% 3600
+
+pruned_green_cab$trip_duration <- 
+  ((as.numeric(strptime(pruned_green_cab$lpep_dropoff_datetime, "%m/%d/%Y %l:%M:%S %p")) - as.numeric(strptime("01/01/2018 12:00:00 AM", "%m/%d/%Y %l:%M:%S %p")))
+- 
+  (as.numeric(strptime(pruned_green_cab$lpep_pickup_datetime, "%m/%d/%Y %l:%M:%S %p")) - as.numeric(strptime("01/01/2018 12:00:00 AM", "%m/%d/%Y %l:%M:%S %p")))) /60
+
 
 pruned_green_cab <- pruned_green_cab[pickup_hour>=0 & pickup_hour<=one.year,]
 
 pruned_green_cab <- pruned_green_cab[dropoff_hour>=0 & dropoff_hour<=one.year,]
 
+pruned_green_cab <- pruned_green_cab[trip_duration>=1.866667 & trip_duration<=46.400000,]
+
 quantile(pruned_green_cab$pickup_hour, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
 quantile(pruned_green_cab$dropoff_hour, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
+quantile(pruned_green_cab$trip_duration, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
+```
+
+
+### feature engineering
+
+```{r add_weather_data}
+weather_dt <- fread(input = "../Data/weather_new.csv")
+weather_dt$DATE <- NULL
+
+a <- merge(x = pruned_green_cab, y = weather_dt, by.x = "pickup_hour", by.y = "HOUR")
+
+# Monday is 1, Sunday is 0.
+a$weekday <- a$pickup_hour %% (24*7)
+
+
+a <- merge(a, a[,.N, by = pickup_hour])
+```
+
+### drop unnecessary column
+```{r transform date}
+names(a)
+a$store_and_fwd_flag <- NULL
+a$VendorID <- NULL
+a$lpep_pickup_datetime <- NULL
+a$lpep_dropoff_datetime <- NULL
+
+names(a) <- c("PickupHour", "RatecodeID", "PULocationID", "DOLocationID", "PassengerCount", "TripDistance", "FareAmount", "Extra", "MtaTax", "TipAmount", "TollsAmount", "ImprovementSurcharge", "TotalAmount", "PaymentType", "TripType", "DropoffHour", "TripDuration", "HourlyDewPointTemperature","HourlyPrecipitation", "HourlyWindSpeed", "Weekday", "N")
 ```
 
 
 ```{r output_pruned_dataset}
-write.csv(pruned_green_cab, file = "../Data/pruned_green_cab.csv",row.names=FALSE, na="")
+write.csv(a, file = "../Data/pruned_green_cab.csv",row.names=FALSE, na="")
 ```
