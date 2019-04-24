@@ -39,11 +39,11 @@ final_dt <- fread( input = "../Data/pruned_green_cab.csv")
 
 ```{r feature_selection}
 names(final_dt)
-selected_dt <- final_dt[, c("pickup_hour","dropoff_hour","RatecodeID","PULocationID","DOLocationID","passenger_count","trip_distance","extra","mta_tax","tolls_amount","improvement_surcharge", "payment_type","trip_type","weekday","fare_amount","tip_amount","N" ) ]
+selected_dt <- final_dt
 ```
 
 ```{r train_test_split}
-temp_dt <- selected_dt[1:10000,]
+temp_dt <- selected_dt[1:1000000,]
 #creating indices
 trainIndex <- createDataPartition(temp_dt$N,p=0.75,list=FALSE)
 #splitting data into training/testing data using the trainIndex object
@@ -64,6 +64,7 @@ linear <- lm(N~.,data=cab_TRAIN[,-c(15,16)])
 pred <- predict(linear,x=cab_TEST[,-c(15,16,17)])
 
 RMSE = sqrt( mean( (pred - unlist(cab_TEST[,17]))^2 ) )
+RMSE
 ```
 
 ```{r knn_r}
