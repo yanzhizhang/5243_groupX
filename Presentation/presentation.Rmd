@@ -1,6 +1,6 @@
 ---
-title: "Group X: Wine Reviews"
-author: 'Jennifer , Gehua Zhang, Xinquan Wang, Yanzhi Zhang'
+title: "Group X: NYC Green Cab"
+author: 'Jennifer Lieu, Gehua Zhang, Xinquan Wang, Yanzhi Zhang'
 date: "April 25 2019"
 output: slidy_presentation
 ---
@@ -27,11 +27,43 @@ weather <- fread(input = '../Data/weather_new.csv',verbose = FALSE,na.strings=c(
 weather <- na.omit(weather)
 ```
 
+# Why This Topic?
 
+- Assisting Cab Drivers
+
+- Popular Locations helps both parties
+
+- Determining Revenues helps smart business decisions
+
+# Data Sets
+
+## NYC Green Cab Dataset
+
+- January 2018 to December 2018
+
+- 19 Variables
+
+- 8807303 observations
+
+- Link to data set https://data.cityofnewyork.us/Transportation/2018-Green-Taxi-Trip-Data/w7fs-fd9i
+
+## Weather data
+
+- January 2018 to December 2018
+
+- 124 Variables
+
+- 8760 observations (missing a few hours' records)
+
+- Link to data set https://www.ncdc.noaa.gov/cdo-web/search
 
 # Introduction to the Problem: 
 
-We used NYC green cab data provided by NYC open data which is a government-run orgnization
+We used the 2018 NYC green cab data provided by NYC open data which is a government-run organization.
+
+```{r}
+head(green)
+```
 
 - **VendorID:** A code indicating the LPEP provider that provided the record.
 1= Creative Mobile Technologies, LLC; 2= VeriFone Inc.
@@ -49,40 +81,49 @@ We used NYC green cab data provided by NYC open data which is a government-run o
 - **Store_and_fwd_flag** This flag indicates whether the trip record was held in vehicle memory before sending to the vendor, aka “store and forward,” because the vehicle did not have a connection to the server.
 Y= store and forward trip
 N= not a store and forward trip
-- **Payment_type:** The title of the wine review, which often contains the vintage if you're interested in extracting that feature
-- **Fare_amount:** The type of grapes used to make the wine (ie Pinot Noir)
-- **MTA_tax:** The winery that made the wine
-- **Improvement_surcharge:** The winery that made the wine
-- **Tip_amount:** The winery that made the wine
-- **Tolls_amount:** The winery that made the wine
-- **Total_amount:** The winery that made the wine
-- **Trip_type:** The winery that made the wine
+- **Payment_type:** A numeric code signifying how the passenger paid for the trip.
+1= Credit card 2= Cash
+3= No charge 4= Dispute
+5= Unknown 6= Voided trip
+- **Fare_amount:** The time-and-distance fare calculated by the meter.
+- **MTA_tax:** $0.50 MTA tax that is automatically triggered based on the metered rate in use.
+- **Improvement_surcharge:** $0.30 improvement surcharge assessed on hailed trips at the flag drop. The improvement surcharge began being levied in 2015.
+- **Tip_amount:** Tip amount – This field is automatically populated for credit card tips. Cash tips are not included.
+- **Tolls_amount:** Total amount of all tolls paid in trip.
+- **Total_amount:** The total amount charged to passengers. Does not include cash tips.
+- **Trip_type:** A code indicating whether the trip was a street-hail or a dispatch that is automatically assigned based on the metered rate in use but can be altered by the driver.
+1= Street-hail 2= Dispatch
 
 
 
 # Data Cleaning and Visualization
 
-From a quick look in the data description pdf, we can find out the "VendorID", "Store_and_fwd_flag", "Payment_type", "ehail_fee" is not correlated with our problem, so we can drop those columns from the very beginning.
+From a quick look in the data description PDFs, we found that "VendorID", "Store_and_fwd_flag", "Payment_type", and "ehail_fee" are not correlated with our problem, so we dropped those columns from the very beginning.
 
 ```{r drop_feature}
 names(green)
 green[, c("VendorID", "store_and_fwd_flag", "payment_type", "ehail_fee")] <- list(NULL)
 ```
 
-The data is very large (793MB) and messy, we need to clean the data before we do data analysis.
+The data was very large (793MB) and messy, we had to clean the data before we performed any data analysis.
 
 # Location ID, Passenger Count
 
-First, we look at the location ID if location ID is in the valid range that is 1 to 265.
+First, we looked at whether the location ID was in the valid range: is 1 to 265.
 
+Quintilian for pick-up location ID
 ```{r}
 quantile(green$PULocationID, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
+```
+Quintilian for drop-off location ID
+```{r}
 quantile(green$DOLocationID, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
 pruned_green <- green[PULocationID>=0&PULocationID<=266&DOLocationID>=0&DOLocationID<=266,]
 ```
 
-Usually, we will only have 1 to 4 passenagers in a sedan or there might be more in different car models. Since this is a number enterred by driver, there could be mistakes in those data entries. Regardless of the possible passenagers, we take a 95% confidence interval on the passenager counts.
+Usually, we would only have 1 to 4 passenagers in a Sedan. However, there might be more passenger seats in different car models. Since this is a number entered by driver, there could be mistakes in those data entries. Regardless of the possible passengers, we take a 95% confidence interval on the passenger counts.
 
+Quantile for the passenger counts
 ```{r}
 quantile(pruned_green$passenger_count, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
 pruned_green <- pruned_green[passenger_count > 0 & passenger_count < 6,]
@@ -98,6 +139,7 @@ pruned_green %>%
 
 # Trip Distance 
 
+Quantile for the trip distance
 ```{r}
 quantile(pruned_green$trip_distance, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
 pruned_green <- pruned_green[trip_distance > 0 & trip_distance <= 21.17,]
@@ -113,30 +155,37 @@ pruned_green %>%
 
 # All Kinds of Fares
 
+Quantile for the fare amount
 ```{r}
 quantile(pruned_green$fare_amount, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
 pruned_green <- pruned_green[fare_amount >= 2.5 & fare_amount <= 58.0,]
 ```
+Quantile for the extra fees
 ```{r}
 quantile(pruned_green$extra, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
 pruned_green <- pruned_green[extra >= 0 & extra <= 1,]
 ```
+Quantile for the mta tax
 ```{r}
 quantile(pruned_green$mta_tax, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
 pruned_green <- pruned_green[mta_tax > 0 & mta_tax <= 0.5,]
 ```
+Quantile for the tip amount
 ```{r}
 quantile(pruned_green$tip_amount, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
 pruned_green <- pruned_green[tip_amount >= 0 & tip_amount <= 0.5,]
 ```
+Quantile for the tolls amount
 ```{r}
 quantile(pruned_green$tolls_amount, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
 pruned_green <- pruned_green[tolls_amount >= 0 & tolls_amount <= 5.76,]
 ```
+Quantile for the improvement surcharge
 ```{r}
 quantile(pruned_green$improvement_surcharge, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
 pruned_green <- pruned_green[improvement_surcharge == 0.3, ]
 ```
+Quantile for the total amount
 ```{r}
 quantile(pruned_green$total_amount, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
 pruned_green <- pruned_green[total_amount >= 3.3 & total_amount <= 73.32,]
@@ -144,6 +193,7 @@ pruned_green <- pruned_green[total_amount >= 3.3 & total_amount <= 73.32,]
 
 # Visualiztion on Fare
 
+We only visualize the fare amount and total amount since the rest are not very influential to the model.
 ```{r}
 plot_1 <- pruned_green %>% 
   ggplot(aes(x=fare_amount)) + 
@@ -162,7 +212,7 @@ grid.arrange(plot_1, plot_3, ncol= 2)
 
 # Time Feature
 
-The date columns are of type character, so they has to be converted into numeric feature. We convert the dates into the seconds elapsed from the first moment of 2018 and group them into time bins by hours. 
+The date columns are of type character, so they had to be converted to type numeric. We convert the dates into the seconds elapsed from the first moment of 2018 and group them into time bins by hours. 
 
 ```{r data_cleaning_lpep_pickup_datetime_lpep_dropoff_datetime}
 one.year <- (as.numeric(strptime("01/01/2019 12:00:00 AM", "%m/%d/%Y %l:%M:%S %p")) - as.numeric(strptime("01/01/2018 12:00:00 AM", "%m/%d/%Y %l:%M:%S %p"))) %/% 3600
@@ -173,10 +223,12 @@ pruned_green$pickup_hour <-
 pruned_green$dropoff_hour <- (as.numeric(strptime(pruned_green$lpep_dropoff_datetime, "%m/%d/%Y %l:%M:%S %p")) - as.numeric(strptime("01/01/2018 12:00:00 AM", "%m/%d/%Y %l:%M:%S %p"))) %/% 3600
 ```
 
-
+Quantile for the pick-up hours
 ```{r}
-
 quantile(pruned_green$pickup_hour, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
+```
+Quantile for the drop-off hours
+```{r}
 quantile(pruned_green$dropoff_hour, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
 
 pruned_green <- pruned_green[pickup_hour>=0 & pickup_hour<=one.year,]
@@ -185,7 +237,7 @@ pruned_green <- pruned_green[dropoff_hour>=0 & dropoff_hour<=one.year,]
 
 # Feature Engineering
 
-We think trip can be a expressive feature for this model, so we calculates the duration simply by substracting drop-off hour by pickup-hour. 
+We think trip duration can be an expressive feature for this model, so we calculated the duration simply by subtracting drop-off hour by pickup-hour. 
 
 ```{r}
 pruned_green$trip_duration <- 
@@ -205,7 +257,7 @@ pruned_green %>%
 
 # Weather Data
 
-Weather is closely associated with taxi demand, people are more likely to call a cab in the cold snowy winter night than a pleasant spring morning. Therefore, we includes the 2018 hourly weather data from https://www.ncdc.noaa.gov/cdo-web/search recorded at central park station.
+Weather is closely associated with taxi demand because people are more likely to call a cab in the cold snowy winter night rather than a pleasant spring morning. Therefore, we includes the 2018 hourly weather data from https://www.ncdc.noaa.gov/cdo-web/search recorded at central park station.
 
 ```{r}
 plot1 <- weather %>% 
@@ -246,7 +298,7 @@ final_dt %>%
 
 # Correlation Analysis
 
-After carefully cleaning the data, we want to explore the correaltion between each variable.
+After carefully cleaning the data, we want to explore the correlation between each variable.
 
 ```{r}
 corr_features = final_dt[,.(pickup_hour, dropoff_hour, PULocationID,RatecodeID, trip_distance,passenger_count,trip_duration,fare_amount,tip_amount,tolls_amount,total_amount,trip_type,HourlyDewPointTemperature,HourlyPrecipitation,HourlyWindSpeed,N)] 
