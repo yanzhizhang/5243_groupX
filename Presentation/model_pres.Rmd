@@ -1,0 +1,129 @@
+---
+title: "model.pres"
+author: "Gehua Zhang (UNI:gz2280)"
+date: "4/29/2019"
+output: slidy_presentation
+---
+
+```{r constant}
+train.size<-100000
+```
+
+
+
+## Model part:
+
+```{r warning=FALSE}
+library(DT)
+library(data.table)
+library(caret)
+library(glmnet)
+```
+
+
+```{r, load_data, include=FALSE, warning=FALSE}
+dt_init <- fread( input = "/Users/gehuazhang/Desktop/GreenCarData/pruned/pruned_green_cab.csv")
+dt_init<-na.omit(dt_init)
+```
+
+# Feature Selection
+
+## We remove some irrelevant columns
+
+The remaining columns are:
+
+```{r feature_selection}
+dt_select <- dt_init[,-c("RatecodeID","TripType","PickupHour","DropoffHour","PULocationID","DOLocationID","PaymentType","Weekday")]
+names(dt_select)
+```
+
+## Randomly select 0.1 million of data:
+
+```{r scale_sample}
+dt_model<-dt_select[sample(nrow(dt_select),train.size),]
+```
+
+# Data Look
+
+```{r}
+head(dt_model)
+```
+
+# Model
+
+Training data (75% of data)
+Testing data (25% of data)
+
+We have 3 different targets:
+fare_amount, tip_amount, demand(N)
+
+## Split data
+
+```{r train_test_split}
+set.seed(101)
+
+#creating indices
+trainIndex <- createDataPartition(dt_model$N,p=0.75,list=FALSE)
+#splitting data into training/testing data using the trainIndex object
+train.set <- dt_model[trainIndex,] #training data (75% of data)
+test.set <- dt_model[-trainIndex,] #testing data (25% of data)
+```
+
+# Training Models
+
+```{r}
+func_model.eval<-function(label,train.set,test.set,type){
+  # Set formula
+  fml<-as.formula(paste0(label,"~."))
+  
+  # Prepare test set
+  test.X <- test.set[, !label, with=FALSE] 
+  test.Y <- test.set[,..label]
+  
+  grid = 10 ^ seq(5, -2, length = 100)
+  
+  # Linear
+  if (type=="linear"){model <- lm(fml,data=train.set)}
+  # Ridge
+  else if (type=="ridge"){model <- train(fml, data = train.set,method = "glmnet",metric = "RMSE",tuneGrid = expand.grid(alpha = 0,lambda=grid))}
+  # Lasso
+  else if (type=="lasso"){model <- train(fml, data = train.set,method = "glmnet",metric = "RMSE",tuneGrid = expand.grid(alpha = 1,lambda=grid))}
+  
+  pred<- predict(model,test.X)
+  RMSE = sqrt(mean((pred - unlist(test.Y))^2))
+  
+  return(RMSE)
+}
+
+```
+
+# Results
+
+## Regression on demand (N)
+
+```{r warning=FALSE}
+func_model.eval("N",train.set,test.set,"linear")
+func_model.eval("N",train.set,test.set,"lasso")
+func_model.eval("N",train.set,test.set,"ridge")
+```
+
+## Regression on FareAmount
+
+```{r warning=FALSE}
+func_model.eval("FareAmount",train.set,test.set,"linear")
+func_model.eval("FareAmount",train.set,test.set,"lasso")
+func_model.eval("FareAmount",train.set,test.set,"ridge")
+
+```
+
+
+## Regression on TipAmount
+
+```{r warning=FALSE}
+func_model.eval("TipAmount",train.set,test.set,"linear")
+func_model.eval("TipAmount",train.set,test.set,"lasso")
+func_model.eval("TipAmount",train.set,test.set,"ridge")
+
+```
+
+

@@ -18,6 +18,8 @@ library(tidyr)
 library(lubridate)
 library(corrplot)
 library(gridExtra)
+library(caret)
+library(glmnet)
 ```
 
 ```{r read data+constant, echo=FALSE, warning=FALSE}
@@ -25,6 +27,7 @@ green <- fread(input = '../Data/2018_Green_Taxi_Trip_Data.csv',verbose = FALSE,n
 weather <- fread(input = '../Data/weather_new.csv',verbose = FALSE,na.strings=c(""))
 
 weather <- na.omit(weather)
+train.size<-100000
 ```
 
 # Why This Topic?
@@ -121,7 +124,7 @@ quantile(green$DOLocationID, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995,
 pruned_green <- green[PULocationID>=0&PULocationID<=266&DOLocationID>=0&DOLocationID<=266,]
 ```
 
-Usually, we would only have 1 to 4 passenagers in a Sedan. However, there might be more passenger seats in different car models. Since this is a number entered by driver, there could be mistakes in those data entries. Regardless of the possible passengers, we take a 95% confidence interval on the passenger counts.
+Usually, we would only have 1 to 4 passengers in a Sedan. However, there might be more passenger seats in different car models. Since this is a number entered by driver, there could be mistakes in those data entries. Regardless of the possible passengers, we take a 95% confidence interval on the passenger counts.
 
 Quantile for the passenger counts
 ```{r}
@@ -304,3 +307,138 @@ After carefully cleaning the data, we want to explore the correlation between ea
 corr_features = final_dt[,.(pickup_hour, dropoff_hour, PULocationID,RatecodeID, trip_distance,passenger_count,trip_duration,fare_amount,tip_amount,tolls_amount,total_amount,trip_type,HourlyDewPointTemperature,HourlyPrecipitation,HourlyWindSpeed,N)] 
 corrplot(cor(corr_features, use='complete.obs'), type='lower')
 ```
+
+```{r, load_data, include=FALSE, warning=FALSE}
+dt_init <- fread( input = "../Data/pruned_green_cab.csv")
+dt_init<-na.omit(dt_init)
+```
+
+# Feature Selection
+
+## We remove some irrelevant columns
+
+The remaining columns are:
+
+```{r feature_selection}
+dt_select <- dt_init[,-c("RatecodeID","TripType","PickupHour","DropoffHour","PULocationID","DOLocationID","PaymentType","Weekday")]
+names(dt_select)
+```
+
+## Randomly select 0.1 million of data:
+
+```{r scale_sample}
+dt_model<-dt_select[sample(nrow(dt_select),train.size),]
+```
+
+# Data Look
+
+```{r}
+head(dt_model)
+```
+
+# Model
+
+Training data (75% of data)
+Testing data (25% of data)
+
+We have 3 different targets:
+fare_amount, tip_amount, demand(N)
+
+## Split data
+
+```{r train_test_split}
+set.seed(101)
+
+#creating indices
+trainIndex <- createDataPartition(dt_model$N,p=0.75,list=FALSE)
+#splitting data into training/testing data using the trainIndex object
+train.set <- dt_model[trainIndex,] #training data (75% of data)
+test.set <- dt_model[-trainIndex,] #testing data (25% of data)
+```
+
+# Training Models
+
+```{r}
+func_model.eval<-function(label,train.set,test.set,type){
+  # Set formula
+  fml<-as.formula(paste0(label,"~."))
+  
+  # Prepare test set
+  test.X <- test.set[, !label, with=FALSE] 
+  test.Y <- test.set[,..label]
+  
+  grid = 10 ^ seq(5, -2, length = 100)
+  
+  # Linear
+  if (type=="linear"){model <- lm(fml,data=train.set)}
+  # Ridge
+  else if (type=="ridge"){model <- train(fml, data = train.set,method = "glmnet",metric = "RMSE",tuneGrid = expand.grid(alpha = 0,lambda=grid))}
+  # Lasso
+  else if (type=="lasso"){model <- train(fml, data = train.set,method = "glmnet",metric = "RMSE",tuneGrid = expand.grid(alpha = 1,lambda=grid))}
+  
+  pred<- predict(model,test.X)
+  RMSE = sqrt(mean((pred - unlist(test.Y))^2))
+  
+  return(RMSE)
+}
+
+```
+
+
+## Regression on Demand: Regression Models
+
+```{r warning=FALSE}
+func_model.eval("N",train.set,test.set,"linear")
+func_model.eval("N",train.set,test.set,"lasso")
+func_model.eval("N",train.set,test.set,"ridge")
+```
+
+## Regression on Demand: Rando Forest Models
+
+```{r warning=FALSE}
+
+```
+
+
+## Interpretation
+
+What conclusions can you draw from the results? How should your findings impact the overall work in the field? Will it change how decisions are made, products are designed, or services are provided?
+
+
+## Assumptions
+
+Which judgments and assumptions did you make to produce your results? Why are these assumptions reasonable?
+
+
+## Limitations and Uncertainties
+
+1. The limited features. Other than the green cab data provided by NYC government, we included the hourly weather to predict the demand. However, there are other possible factors that affect the demand for cabs than weather.
+
+2. Our model is mainly limited to New York City. If we apply our model to other cities, it will not provide accurate predictions due to the difference in locations.
+
+3. Our data only includes the data from 2018.
+
+4. Due to the large size of data and the limited computational power that we have, we cannot run complicated models like neural networks.
+
+
+## Areas of Future Investigation
+
+1. We want to invastigate more data further, things like when and where the events were taking place, or we could includes more data from different years and yellow cab data.
+
+2. We can spend time in designing sophisticated models, and they usually give a better results.
+
+
+## References
+
+Link to Green cab data: https://data.cityofnewyork.us/Transportation/2018-Green-Taxi-Trip-Data/w7fs-fd9i
+
+Weather data: https://www.ncdc.noaa.gov/cdo-web/search
+
+Some similar project:
+
+Analyze the NYC Taxi Data https://chih-ling-hsu.github.io/2018/05/14/NYC
+
+Analyzing 1.1 Billion NYC Taxi and Uber Trips, with a Vengeance https://toddwschneider.com/posts/analyzing-1-1-billion-nyc-taxi-and-uber-trips-with-a-vengeance/
+
+The Data Science of NYC Taxi Trips: An Analysis & Visualization https://www.kdnuggets.com/2017/02/data-science-nyc-taxi-trips.html
+
