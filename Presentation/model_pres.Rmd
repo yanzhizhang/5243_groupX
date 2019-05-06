@@ -6,23 +6,25 @@ output: slidy_presentation
 ---
 
 ```{r constant}
-train.size<-100000
+train.size<-10000
 ```
 
 
 
 ## Model part:
 
-```{r warning=FALSE}
+```{r warning=FALSE, echo=FALSE}
 library(DT)
 library(data.table)
 library(caret)
 library(glmnet)
+library(dplyr)
+library(randomForest)
 ```
 
 
 ```{r, load_data, include=FALSE, warning=FALSE}
-dt_init <- fread( input = "/Users/gehuazhang/Desktop/GreenCarData/pruned/pruned_green_cab.csv")
+dt_init <- fread( input = "../Data/pruned_green_cab.csv")
 dt_init<-na.omit(dt_init)
 ```
 
@@ -33,14 +35,15 @@ dt_init<-na.omit(dt_init)
 The remaining columns are:
 
 ```{r feature_selection}
-dt_select <- dt_init[,-c("RatecodeID","TripType","PickupHour","DropoffHour","PULocationID","DOLocationID","PaymentType","Weekday")]
+dt_select <- dt_init[,-c("RatecodeID","TripType","DropoffHour","DOLocationID","PaymentType","Weekday")]
 names(dt_select)
 ```
 
 ## Randomly select 0.1 million of data:
 
 ```{r scale_sample}
-dt_model<-dt_select[sample(nrow(dt_select),train.size),]
+# dt_model<-dt_select[sample(nrow(dt_select),train.size),]
+dt_model <- sample_n(dt_select, train.size)
 ```
 
 # Data Look
@@ -55,7 +58,7 @@ Training data (75% of data)
 Testing data (25% of data)
 
 We have 3 different targets:
-fare_amount, tip_amount, demand(N)
+demand(N), AvgRevenue
 
 ## Split data
 
@@ -107,23 +110,21 @@ func_model.eval("N",train.set,test.set,"lasso")
 func_model.eval("N",train.set,test.set,"ridge")
 ```
 
-## Regression on FareAmount
-
-```{r warning=FALSE}
-func_model.eval("FareAmount",train.set,test.set,"linear")
-func_model.eval("FareAmount",train.set,test.set,"lasso")
-func_model.eval("FareAmount",train.set,test.set,"ridge")
-
-```
-
 
 ## Regression on TipAmount
 
 ```{r warning=FALSE}
-func_model.eval("TipAmount",train.set,test.set,"linear")
-func_model.eval("TipAmount",train.set,test.set,"lasso")
-func_model.eval("TipAmount",train.set,test.set,"ridge")
+func_model.eval("AvgRevenue",train.set,test.set,"linear")
+func_model.eval("AvgRevenue",train.set,test.set,"lasso")
+func_model.eval("AvgRevenue",train.set,test.set,"ridge")
+```
 
+## RandomForest on AvgRevenue
+
+```{r warning=FALSE}
+rf.model<-randomForest(AvgRevenue~.,data=train.set)
+rf.pred <- predict(rf.model, newdata=test.set[,-c("AvgRevenue")])
+sqrt(mean( (rf.pred - unlist(test.set$AvgRevenue))^2))
 ```
 
 
