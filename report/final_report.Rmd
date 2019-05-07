@@ -1,0 +1,559 @@
+---
+title: "Green Taxicab"
+author: "Group X: Lieu, Jennifer (jll2234), Gehua Zhang (gz2280), Xinquan Wang (xw2566), Yanzhi Zhang (yz3470)"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(echo = TRUE, eval = TRUE, comment="", warning = FALSE, message = FALSE, tidy.opts=list(width.cutoff=55), tidy = TRUE)
+```
+
+
+# Introduction:
+Our group is focusing on finding and understanding the distribution of the demand for taxicabs in New York City. We believe that this issue is important because it would lead to a better allocation of resources (AKA taxicabs) in the city in order to optimize the benefit towards both taxicab drivers and passengers. If taxicab companies understand what locations are popular, given the time, weather and other factors, it would help them distribute their resources in order to maximize their revenues. Likewise, if taxicab drivers understand where they should be in order to pick up the most passengers, consumers of Green taxicabs will be able to find taxis more easily in order to arrive at the destination of their choice within a reasonable amount of time. Understanding the nature of the demands of taxicab would lead us towards a pareto efficient distribution of taxicabs around the city.
+
+# Sources of Data:
+In order to find and understand the distribution of demand for taxicabs, we used 12 weather data set, and 12 green taxicab datasets for New York City from January of 2018 to December of 2018. Each of the 24 datasets represent a month of 2018 for either taxicab or weather data. The datasets may be obtained from the following links:
+
+New York Green Taxi Data:
+
+https://data.cityofnewyork.us/Transportation/2018-Green-Taxi-Trip-Data/w7fs-fd9i
+
+New York Weather Data:
+
+https://www.ncdc.noaa.gov/cdo-web/search
+
+We believe that the New York Weather Dataset is reliable because it is a publicly available dataset provided by the government rather than a private company or groups with special incentives or motivation to skew the data. We believe that the New York Green Taxi Data is reliable because it is a publicly available open source dataset from a well known website. Previous versions of this data set have also been used in competitions, but for the sake of originality of the assignment, we are using the most recent ones. Both datasets are also representative of the population in New York because of the sheer number of observations present. However no data set is perfect and every dataset has their biases.
+
+```{r library, echo=FALSE}
+library(DT)
+library(data.table)
+library(lubridate)
+library(fasttime)
+library(ggplot2)
+library(glmnet)
+library(caret)
+library(randomForest)
+library(dplyr)
+library(gridExtra)
+library(corrplot)
+```
+
+```{r load_data}
+green_cab <- fread(input = "../Data/2018_Green_Taxi_Trip_Data.csv")
+
+#Download weather data from https://www.ncdc.noaa.gov/cdo-web/datatools/lcd
+#The original source is a .csv file. We did some simple modifications to the file on Excel (column remove). Then we load it in R here for further modifications.
+dt_weather<-fread("../Data/weather.csv")
+```
+
+```{r constant}
+train.linear.size<-100000
+train.rf.size<-10000
+```
+
+
+# Examination of Data
+
+```{r head}
+head(green_cab)
+```
+
+```{r exploration}
+sapply(green_cab, class)
+```
+
+
+When examining the weather dataset, we found that there were 8760 observations across all 12 datasets with 124 different variables to work with. When examining the New York City Green taxicab datasets, we found that there were 8,877,303 observations across all 12 datasets with 19 different variables. For the weather data, the only issue that we ran into was that there were a few hours of missing information, but found that this missing information did not really impact the overall investigation due to the fact that these few hours played a small role in the span of 1 year worth of data.
+
+Below, we have listed the definitions for all 19 variables of the New York Taxicab dataset. We will not be including the variable definitions for the weather dataset because there are 124 variables in that dataset. 
+	
+- **VendorID:** A code indicating the LPEP provider that provided the record.
+1= Creative Mobile Technologies, LLC; 2= VeriFone Inc.
+- **lpep_pickup_datetime:** The date and time when the meter was engaged.
+- **lpep_dropoff_datetime:** The date and time when the meter was disengaged.
+- **Passenger_count:** The number of passengers in the vehicle. This is a driver-entered value.
+- **Trip_distance:** The elapsed trip distance in miles reported by the taximeter.
+- **PULocationID:** TLC Taxi Zone in which the taximeter was engaged
+- **DOLocationID:** TLC Taxi Zone in which the taximeter was disengaged
+- **RateCodeID**The final rate code in effect at the end of the trip.
+1= Standard rate
+2=JFK
+3=Newark
+4=Nassau or Westchester 5=Negotiated fare 6=Group ride
+- **Store_and_fwd_flag** This flag indicates whether the trip record was held in vehicle memory before sending to the vendor, aka “store and forward,” because the vehicle did not have a connection to the server.
+Y= store and forward trip
+N= not a store and forward trip
+- **Payment_type:** A numeric code signifying how the passenger paid for the trip.
+1= Credit card 2= Cash
+3= No charge 4= Dispute
+5= Unknown 6= Voided trip
+- **Fare_amount:** The time-and-distance fare calculated by the meter.
+- **MTA_tax:** $0.50 MTA tax that is automatically triggered based on the metered rate in use.
+- **Improvement_surcharge:** $0.30 improvement surcharge assessed on hailed trips at the flag drop. The improvement surcharge began being levied in 2015.
+- **Tip_amount:** Tip amount – This field is automatically populated for credit card tips. Cash tips are not included.
+- **Tolls_amount:** Total amount of all tolls paid in trip.
+- **Total_amount:** The total amount charged to passengers. Does not include cash tips.
+- **Trip_type:** A code indicating whether the trip was a street-hail or a dispatch that is automatically assigned based on the metered rate in use but can be altered by the driver.
+1= Street-hail 2= Dispatch
+
+For the New York City taxicab dataset, we ran into a few issues. One issue was the fact that we had a few NA values. We decided to omit these values because we had 8.9 million observations, and the amount of NA values was an extremely small fraction of these observations. Another issue we ran into was the fact that a small fraction of our variables had values that were outside of the acceptable range provided by our dataset. The “problem” variables that we had to work with were: Total_amount, Fare_amount, improvement_surcharge, Tip_amount. Because only 0.16% of observations had negative values for variables that should be nonnegative however, we decided decided to take the absolute value of these quantities. We assume that these values are negative values are due to data entry errors when performing data collection and data entry. Furthermore, because the minimum Total_amount charged for any service in the data set is $2.5, every transaction falling below that amount was replaced by the median value of the Total_amount column with reasonable values. We decided on median values rather than mean values because median values are robust to outliers, and taxicab values have a large range and distribution. 
+
+
+VendorID
+```{r data_cleaning_VendorID}
+pruned_green_cab <- green_cab[VendorID %in% c(1,2),]
+```
+
+
+ehail_fee
+```{r data_cleaning_ehail_fee}
+# All NAs in ehail_fee, remove this column
+pruned_green_cab[,ehail_fee:=NULL]
+```
+
+In order to investigate our datasets to come up with a meaningful conclusion on the distribution of demand for taxicabs in New York City, we performed a bit of exploratory data analysis. 
+
+```{r features_quantile}
+# Show quantile values:
+quantile.probs<-c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1)
+quantile.cols<-c("PULocationID","DOLocationID","passenger_count","trip_distance","fare_amount","extra","mta_tax","tip_amount","tolls_amount","improvement_surcharge","total_amount")
+quantile_df<-green_cab[,lapply(.SD,quantile,probs=quantile.probs),.SDcols=quantile.cols]
+datatable(cbind(data.table("Quantiles"=quantile.probs),quantile_df))
+```
+
+
+First, we looked at whether the pick up and drop off location IDs was in the valid range of 1 to 265. We found that both variables were fine. We then viewed the distribution of the number of passengers per vehicle. Usually, we would only have 1 to 4 passengers in a Sedan. However, there might be more passenger seats in different car models. Since this is a number entered by driver, there could be mistakes in those data entries. Regardless of the possible passengers, we took a 95% confidence interval on the passenger counts.
+
+We can see that there is usually only one passenger per vehicle outside of the driver. 
+
+We also viewed the quantiles of certain costs involved with riding the taxicabs, and found negative values that needed to be corrected in the following variables: Total_amount, Fare_amount, improvement_surcharge, Tip_amount. We also made sure that we understood the nature of the distributions of these amounts when building our model. 
+Quantile for the fare amount
+
+We also decided to include weather data into our model because we feel that the model would be incomplete otherwise. We believe that weather is closely associated with taxicab demand because people are more likely to call a cab in harsher, extreme hot and cold weathers rather than weather where it is nice to be outside in. For example, people would be more likely to call a taxicab in the cold, snowy, Winter night rather than a pleasant, Spring morning. 
+
+```{r}
+# Weather Data
+## HourlyDewPointTemperature
+plot_5 <- dt_weather %>% 
+  ggplot(aes(x=HourlyDewPointTemperature)) + 
+  geom_histogram(bins=100, fill="red")+
+  theme_bw()+theme(axis.title = element_text(size=12),axis.text = element_text(size=12))+
+  ylab("Density")
+## HourlyPrecipitation
+plot_6 <- dt_weather %>% 
+  ggplot(aes(x=HourlyPrecipitation)) + 
+  geom_histogram(bins=100, fill="red")+
+  theme_bw()+theme(axis.title = element_text(size=12),axis.text = element_text(size=12))+
+  ylab("Density")
+## HourlyWindSpeed
+plot_7 <- dt_weather %>% 
+  ggplot(aes(x=HourlyWindSpeed)) + 
+  geom_histogram(bins=50, fill="red")+
+  theme_bw()+theme(axis.title = element_text(size=12),axis.text = element_text(size=12))+
+  ylab("Density")
+grid.arrange(plot_5, plot_6, plot_7, ncol = 3)
+```
+
+
+```{r}
+# From the quantiles of each variables,
+# We manually choose the values to keep:
+## Usually, we would only have 1 to 4 passengers in a Sedan. However, there might be more passenger seats in different car models. Since this is a number entered by driver, there could be mistakes in those data entries. Regardless of the possible passengers, we take a 95% confidence interval on the passenger counts.
+
+pruned_green_cab <- pruned_green_cab[PULocationID>0&PULocationID<266&DOLocationID>0&DOLocationID<266,]
+pruned_green_cab <- pruned_green_cab[passenger_count > 0 & passenger_count < 6,]
+pruned_green_cab <- pruned_green_cab[trip_distance >= 0 & trip_distance <22,]
+pruned_green_cab <- pruned_green_cab[fare_amount >= 2.5 & fare_amount <= 46.5,]
+pruned_green_cab <- pruned_green_cab[extra >= 0 & extra <= 1,]
+pruned_green_cab <- pruned_green_cab[mta_tax > 0 & mta_tax <= 0.5,]
+pruned_green_cab <- pruned_green_cab[tip_amount >= 0 & tip_amount <= 0.5,]
+pruned_green_cab <- pruned_green_cab[tolls_amount >= 0 & tolls_amount <= 5.76,]
+pruned_green_cab <- pruned_green_cab[improvement_surcharge == 0.3, ]
+pruned_green_cab <- pruned_green_cab[total_amount >= 3.3 & total_amount <= 73.32,]
+# payment_type: only 1 -6  others do not make sense
+pruned_green_cab <- pruned_green_cab[payment_type %in% c(1,2,3,4,5,6),]
+# trip_type: only 1 or 2  others do not make sense
+pruned_green_cab <- pruned_green_cab[trip_type %in% c(1,2),]
+```
+
+
+lpep_pickup_datetime lpep_dropoff_datetime
+```{r data_cleaning_lpep_pickup_datetime_lpep_dropoff_datetime}
+# Convert lpep_pickup_datetime & lpep_dropoff_datetime into hourly data
+time.fmt<-"%m/%d/%Y %I:%M:%S %p"
+
+# fast_strptime is much faster than striptime
+func_convert.time<-function(val,fmt){
+  result<-(as.numeric(fast_strptime(val, fmt,"GMT"))-as.numeric(fast_strptime("01/01/2018 12:00:00 AM", "%m/%d/%Y %I:%M:%S %p","GMT")))
+  return(result)
+}
+
+# Generate new columns: pickup_hour & dropoff_hour
+pruned_green_cab[,c("pickup_hour","dropoff_hour"):=lapply(.SD,func_convert.time,fmt=time.fmt),.SDcols=c("lpep_pickup_datetime","lpep_dropoff_datetime")]
+
+# Generate new column: trip_duration
+pruned_green_cab[,"trip_duration":=round((dropoff_hour-pickup_hour)/60,4)]
+
+# Convert seconds data into hourly data by divide 3600
+pruned_green_cab[,c("pickup_hour","dropoff_hour"):= c(pickup_hour%/%3600,dropoff_hour%/%3600)]
+
+# Now we have three new columns: pickup_hour & dropoff_hour & trip_duration
+```
+
+The date columns were of type character, so they had to be converted to type numeric in order to abstract meaningful information from the data. We convert the dates into the seconds elapsed from the zeroth second of 2018 and group them into time bins by hours. Below, we can see that the distribution of pick up and drop off hours are very similar, which is to be expected because most people do not spend that much time in a taxicab.
+
+```{r visualise_features_1}
+# Cab data
+## passenger_count
+pruned_green_cab %>% 
+  group_by(trip_duration) %>% 
+  count() %>% 
+  ggplot(aes(x=trip_duration,y=n, fill=trip_duration))+
+  geom_col()+
+  theme_bw()+theme(axis.title = element_text(size=11),axis.text = element_text(size=8))+
+  ylab("N")
+```
+
+We then decided to go further in order to abstract even more information from the dates by finding the length of the trip duration, and use it as a variable in our data set in order to feed more information to our model and obtain more accurate predictions and results. When plotting the histogram below of the trip_duration, we notice that the distribution of time of the trip is skewed right as predicted, however the shape of the histogram isn’t as sharp as those of the fare_amount, total_amount, and trip_distance. 
+
+
+```{r}
+# Evaluate time data quantiles, remove outliers
+one.year <- func_convert.time("01/01/2019 12:00:00 AM",time.fmt)%/% 3600
+
+quantile_time_df<-pruned_green_cab[,lapply(.SD,quantile,probs=quantile.probs),.SDcols=c("pickup_hour","dropoff_hour","trip_duration")]
+datatable(cbind(data.table("Quantiles"=quantile.probs),quantile_time_df))
+```
+
+```{r}
+# Remove outliers in time data
+pruned_green_cab <- pruned_green_cab[pickup_hour>=0 & pickup_hour<=one.year,]
+pruned_green_cab <- pruned_green_cab[dropoff_hour>=0 & dropoff_hour<=one.year,]
+pruned_green_cab <- pruned_green_cab[trip_duration>=1.866667 & trip_duration<=46.400000,]
+```
+
+```{r add_weather_data}
+### Adding weather data
+dt_weather[,"HOUR":= lapply(.SD,func_convert.time,fmt="%Y-%m-%dT%H:%M:%S"),.SDcols=c("DATE")]
+dt_weather[,"HOUR":=HOUR%/%3600]
+dt_weather[,DATE:=NULL]
+
+# Merge weather data to grenn car data
+dt_init <- merge(x = pruned_green_cab, y = dt_weather, by.x = "pickup_hour", by.y = "HOUR")
+```
+
+```{r init_feature_engineering}
+#Initial Feature Engineering (There will be a further feature engineering )
+
+## Adding more columns
+### Monday is 1, Sunday is 0.
+dt_init[,weekday:=pickup_hour %% (24*7)]
+
+### Generate our model's label
+### The number of transactions during a certain time
+#dt_init <- merge(dt_init, dt_init[,.N, by = pickup_hour])
+
+
+dt_init[, "N" := .N, by = c("pickup_hour", "PULocationID")]
+dt_init[, "TotalRevenue" := sum(total_amount), by = c("pickup_hour", "PULocationID")]
+dt_init[, "AvgRevenue" := TotalRevenue/N, by = c("pickup_hour", "PULocationID")]
+
+
+## drop unnecessary column
+dt_init[,c("store_and_fwd_flag","VendorID","lpep_pickup_datetime","lpep_dropoff_datetime"):=NULL]
+
+## Remove row which contains NA
+dt_init<-na.omit(dt_init)
+
+## show
+colnames(dt_init)
+datatable(head(dt_init))
+```
+
+```{r visualise_features_2}
+# Cab data
+## passenger_count
+plot_1<-dt_init %>% 
+  group_by(passenger_count) %>% 
+  count() %>% 
+  ggplot(aes(x=passenger_count,y=n, fill=passenger_count))+
+  geom_col()+
+  theme_bw()+theme(axis.title = element_text(size=11),axis.text = element_text(size=8))+
+  ylab("N")+coord_cartesian(x=c(0,6))
+
+## trip_distance
+plot_2<-dt_init %>% 
+  ggplot(aes(x=trip_distance)) + 
+  geom_histogram(bins=100, fill="red")+
+  theme_bw()+theme(axis.title = element_text(size=11),axis.text = element_text(size=8))+
+  ylab("Density")+coord_cartesian(x=c(0,25))
+
+grid.arrange(plot_1, plot_2, ncol= 2)
+
+```
+
+We also looked at the distribution for trip distances and found that the distances are skewed to the right, suggesting that more people tend to take shorter trips on the taxicabs rather than longer ones.  
+
+```{r}
+
+## fare_amount
+plot_3 <- dt_init %>% 
+  ggplot(aes(x=fare_amount)) + 
+  geom_histogram(bins=50, fill="red")+
+  theme_bw()+theme(axis.title = element_text(size=11),axis.text = element_text(size=8))+
+  ylab("Density")+coord_cartesian(x=c(0,60))
+## total_amount
+plot_4 <- dt_init %>% 
+  ggplot(aes(x=total_amount)) + 
+  geom_histogram(bins=50, fill="red")+
+  theme_bw()+theme(axis.title = element_text(size=11),axis.text = element_text(size=8))+
+  ylab("Density")+coord_cartesian(x=c(0,60))
+grid.arrange(plot_3, plot_4, ncol= 2)
+```
+
+We also view the histogram for the fare_amount and total_amount. The other amounts charged are not as influential to the model because they are either low fees, consistent fees, or a combination of the two, so plotting a histogram to view the distribution of the plots would not be as helpful. We notice that these histograms show that both fare_amount and total_amount are skewed right. Furthermore, fare_amount is very similarly distributed to total_amount in the distribution itself. This is because the other tax costs, tip costs, etc. are either low amounts or flat rates and do not contribute as much to the shape of the total_amount cost. 
+
+We also notice that the total_amount cost is very similarly distributed to the trip_distance, which suggests that they could be highly correlated. We believe that total_amount and trip_distance are strongly, positively, correlated. This means that we believe that trip_distance is not only a strong predictor of fare_amount and total_amount, but the longer the trip distance is, the higher the fare_amount and the higher the total_amount. 
+
+
+```{r}
+# Weather Data
+## HourlyDewPointTemperature
+plot_5 <- dt_init %>% 
+  ggplot(aes(x=HourlyDewPointTemperature)) + 
+  geom_histogram(bins=100, fill="red")+
+  theme_bw()+theme(axis.title = element_text(size=12),axis.text = element_text(size=12))+
+  ylab("Density")
+## HourlyPrecipitation
+plot_6 <- dt_init %>% 
+  ggplot(aes(x=HourlyPrecipitation)) + 
+  geom_histogram(bins=100, fill="red")+
+  theme_bw()+theme(axis.title = element_text(size=12),axis.text = element_text(size=12))+
+  ylab("Density")
+## HourlyWindSpeed
+plot_7 <- dt_init %>% 
+  ggplot(aes(x=HourlyWindSpeed)) + 
+  geom_histogram(bins=50, fill="red")+
+  theme_bw()+theme(axis.title = element_text(size=12),axis.text = element_text(size=12))+
+  ylab("Density")
+grid.arrange(plot_5, plot_6, plot_7, ncol = 3)
+```
+
+Plotted above is the quantity demanded of pick up varying by hourly temperature, precipitation, and wind speed. We notice that people tend to utilize taxicabs more when the temperatures are higher rather than lower, with a small spike of taxicab demand when Fahrenheit temperatures are in the low 30s. This can be explained by the fact that hot New York temperatures can be rather extreme, and subway temperature control countermeasures are essentially nonexistent. The subways tend to be a lot hotter than the sidewalks during the summer, and tend to be a lot colder during the Winter. However, when the temperatures drop below 20 degrees, people tend to stay home rather than going out, which explains why below 20 degrees Fahrenheit, people tend to not utilize taxicabs as much due to snowstorm warnings. 
+
+When viewing the Hourly Precipitation histogram, we notice that people tend to order taxicabs when there is no precipitation, rather than when it is. Although it does rain a decent amount in New York, when viewing hourly data on New York Precipitation, we notice that precipitation is very scarce. Hourly wind speed can be explained in a similar fashion. New York can be windy duration certain times of the year. However, when we are viewing New York holistically by each hour, wind speeds are normally low, even in lower or higher temperatures. 
+
+```{r}
+
+# Visualise Demand(N) distribution
+dt_init %>% 
+  ggplot(aes(x=N)) + 
+  geom_histogram(bins=1000, fill="red")+
+  theme_bw()+theme(axis.title = element_text(size=12),axis.text = element_text(size=12))+
+  ylab("Density") 
+```
+
+Finally, we look at the histogram of the demand of taxicabs. We call this variable N. N is defined to be the number of passenger pickups in every given hour. It is expected that the demand of taxicabs is clustered around one area, with a few outliers on the higher end of quantity demand. 
+
+```{r}
+corr_features = dt_init[,.(pickup_hour, dropoff_hour, PULocationID,RatecodeID, trip_distance,passenger_count,trip_duration,fare_amount,tip_amount,tolls_amount,total_amount,trip_type,HourlyDewPointTemperature,HourlyPrecipitation,HourlyWindSpeed,N)] 
+corrplot(cor(corr_features, use='complete.obs'), type='lower')
+```
+
+As predicted, there is a high correlation between trip distance and total amount and between trip_distance and fare_amount. Additionally, the correlation between trip duration and trip distance are also pretty close to one as well because the circle indicating the strength of their correlation is deep blue. Because these circles are of such a dark color, we can assume that they are decently close to one and therefore are pretty strong predictors of the tip amount and are positively correlated. Moreover, the correlation between trip distance and total amount and between trip_distance and fare_amount suggest that one is almost a perfect predictor for the other.
+
+# Question: Why are these correlation implications important? 
+These correlation implications help us determine whether Revenue or Quantity Demand is more helpful dependent variable to predict. When companies are determining whether they should stay in business, how many taxicabs they should dispatch to pick up passengers, and where to send these taxicabs in order to wait for passengers, they tend to focus on the revenue that each  taxicab makes per day, rather than the number of people they help or the number of trips that they make. Companies have profit maximization incentives. 
+
+However, since trip duration is highly, positively correlated with the total amount made (AKA the revenue), we know that longer trips tend to yield a higher contribution towards the daily revenue than shorter trips. If a taxicab driver were to make more revenue per trip, they tend to make less trips in a day due to the limited amount of hours there are in a day to drive their cab. Taxicabs that have shorter trips may not be able to receive as much revenue per trip, but they can make more trips around the city in order to build more increments of incoming revenue. Therefore, we know that there is a higher urgency for taxicabs to be able to find customers, rather than there is for them to receive more revenue per trip. We also notice that the total fare per trip has a very weak correlation to location. So it would not make sense to create a model that advises taxicab drivers to camp around certain locations in order for higher revenue amounts.
+
+Because our goal is to attempt to model the distribution of demand in order to advise how taxicab companies should distribute their taxicab resources, it would be a lot more feasible to measure this with quantity demanded, rather than revenue whether we are attempting to help passengers find taxicabs, or whether we are attempting to help companies maximize their revenues. However, we will attempt to measure the average revenue per trip regardless.
+
+Finally, we ended up with the following variables where N is the dependent variable as described earlier, and the rest of the variables are the independent variables. Variables are dropped if they have a very small to no correlation with the dependent variable N. 
+
+```{r continue_feature_engineering, warning=FALSE}
+# A further feature engineering: Using random forest for feature Selection
+## First we obtain the importance of each features
+### Data size is sensitive to random forest's training time, so we only use a small part of data to have a general idea of the importance of each variables
+rf.model<-randomForest(N~.,data=dt_init[sample(nrow(dt_init),5000),])
+```
+
+```{r visualise_imp}
+# visualize the importance of each variable
+varImpPlot(rf.model)
+```
+
+```{r gini_index, warning=FALSE}
+## Use Gini index to measure the importance of features:
+imp<-round(importance(rf.model,type=2),3)
+dt_imp<-as.data.table(imp,keep.rownames=TRUE)
+dt_imp<-dt_imp[order(IncNodePurity,decreasing = TRUE)]
+datatable(dt_imp)
+```
+
+```{r remove_variables, warning=FALSE}
+# Remove variables whose Gini Index almost equal to 0
+dt_model <- dt_init[,-c("trip_type","mta_tax","improvement_surcharge","RatecodeID")]
+dim(dt_model)
+```
+
+```{r store_data}
+# Store data to avoid re-run data cleaning and feature engineering
+fwrite(dt_model,"../Data/pruned_cab_data.csv")
+```
+
+# Your Investigation:
+We have split the data into a training and test set. The training set is 75% of the model, and the test set is 25% of our model. We then performed Lasso Regression, Ridge Regression, Linear Regression, and Random Forest on the data in order to predict N. We chose Ridge and Lasso Regression in order to fight against any overfitting that we might have done. We have chosen linear regression as a baseline model to compare our other models to. We have chosen Random Forest because it is known to be an accurate Machine learning algorithm in terms of prediction. However, the Random Forest algorithm tends to be very computationally expensive with a larger dataset. In order to combat the slow running algorithm, we have only used a portion of our dataset in order to run the model.
+
+
+```{r scale_sample}
+# Now we train our model
+## Randomly select 100000 rows of data for train linear models:
+## Randomly select 10000 rows of data from linear data set to train rf models (computational reason)
+dt_model<-fread("../Data/pruned_cab_data.csv")
+dt_linear<-dt_model[sample(nrow(dt_model),train.linear.size),]
+dt_rf<-dt_linear[sample(nrow(dt_linear),train.rf.size),]
+```
+
+```{r split_data}
+# Split data
+## Training data (75% of data)
+## Testing data (25% of data)
+## Dependent variable: demand(N)
+
+set.seed(1010101)
+# Creating indices
+trainIndex <- createDataPartition(dt_linear[,N],p=0.75,list=FALSE)
+# Splitting data into training/testing data using the trainIndex object
+train.set <- dt_linear[trainIndex,] # Training data (75% of data)
+test.set <- dt_linear[-trainIndex,] # Testing data (25% of data)
+```
+
+```{r, linear_model, warning=FALSE}
+# Three models: simple linear, ridge, lasso
+## Input dependent variables, train set, test set, regression type
+func_model.eval<-function(label,train.set,test.set,type){
+  # Set formula
+  fml<-as.formula(paste0(label,"~."))
+  
+  # Prepare test set
+  test.X <- test.set[, !label, with=FALSE] 
+  test.Y <- test.set[,..label]
+  
+  grid = 10 ^ seq(5, -2, length = 100)
+  
+  # Linear
+  if (type=="linear"){model <- lm(fml,data=train.set)}
+  # Ridge
+  else if (type=="ridge"){model <- train(fml, data = train.set,method = "glmnet",metric = "RMSE",tuneGrid = expand.grid(alpha = 0,lambda=grid))}
+  # Lasso
+  else if (type=="lasso"){model <- train(fml, data = train.set,method = "glmnet",metric = "RMSE",tuneGrid = expand.grid(alpha = 1,lambda=grid))}
+  
+  pred<- predict(model,test.X)
+  RMSE = sqrt(mean((pred - unlist(test.Y))^2))
+  
+  return(RMSE)
+}
+
+```
+
+# Results:
+Below, we have shown the accuracy of our models through calculating the Root Mean Square Error (RMSE).
+
+```{r linear_RMSE_N, warning=FALSE}
+# Obtain RMSE of each linear models
+func_model.eval("N",train.set,test.set,"linear")
+func_model.eval("N",train.set,test.set,"lasso")
+func_model.eval("N",train.set,test.set,"ridge")
+```
+
+```{r rf_RMSE_N, warning=FALSE}
+# We train RF on 10% of linear training data set, and use the same test set to see how well RF performs
+rf.model.N<-randomForest(N~.,data=dt_rf)
+rf.pred.N <- predict(rf.model.N, newdata=test.set[,-c("N")])
+sqrt(mean((rf.pred.N - unlist(test.set[,N]))^2))
+
+```
+
+```{r linear_RMSE_revenue, warning=FALSE}
+# Regression on Average Revenue
+func_model.eval("AvgRevenue",train.set,test.set,"linear")
+func_model.eval("AvgRevenue",train.set,test.set,"lasso")
+func_model.eval("AvgRevenue",train.set,test.set,"ridge")
+```
+
+```{r rf_RMSE_revenue, warning=FALSE}
+# Random Forest Models
+## Following same idea as before
+rf.model.revenue<-randomForest(AvgRevenue~.,data=dt_rf)
+rf.pred.revenue <- predict(rf.model.revenue, newdata=test.set[,-c("AvgRevenue")])
+sqrt(mean( (rf.pred.revenue - unlist(test.set[,AvgRevenue]))^2))
+# Even we only use 10% data to train RF, the performance is better than all linear models.
+```
+
+# Interpretation:
+######
+We've chosen 100,000 samples to train the linear, Lasso and ridge regression models. And resampled 10,000 samples from this set as our random forest training set.
+######
+We notice that the Root Mean Squared Error for all three regressions are very similar. This is because Lasso and Ridge regression are almost exactly the same except for the fact that they utilize different penalizing errors for overfitting. The reason why we notice that the errors are almost identical is because we have already performed sufficient variable selection, so the models’ RMSE are close to one another. As predicted, the Root Mean Squared Error of Random Forest is less than half of the other three models because Random Forest is known for its accurate prediction results despite the fact that we only used 10% of the training data in order to train our Random Forest Algorithm. 
+######
+Overall all of the models we built are pretty accurate in terms of RMSE. Thus the features we extract and the models we built are appropriate to predict the taxi demand and average revenue. And the taxi agency can allocate their resource more efficiently taking weather, time and neighborhood into consideration. This may benefit green cab drivers as well since they know how to maximize their revenue accordingly.
+######
+
+# Assumptions:
+We did not scale the data because our 4 models, Simple linear regression, Ridge regression, Lasso regression, and Random Forest are not sensitive to the magnitude of the data. Also since our comparison is based on one same data, scaling is not necessary here.
+
+The training data size for three linear models is 100 thousands rows, for Random Forest is 10 thousands rows. All of models use the same test set. We have also tried to increase the training size of the linear models.  However, this barely made a difference in the decrease of the  Root Mean Squared Error. When attempting to increase the training set of the Random Forest Model, when we increased the training size from 10,000 to 50,000 observations, the RMSE reduces by roughly 100.
+
+We assume that the dataset is either complete or representative of the New York taxicab market.
+
+We assume that any negative values in the cost of transportation is due to data entry errors in the sense that the taxicab driver accidentally inputted a negative value rather than the positive version of that value.
+
+We assume that any values that fall out of the acceptable range for the “TotalAmount” variable can be replaced by the median score.
+
+# Limitations and Uncertainties:
+The limited features. Other than the green cab data provided by NYC government, we included the hourly weather to predict the demand. However, there are other possible factors that affect the demand for cabs than weather.
+
+We did not take advantage of the Yellow Cab Dataset. There might be factors of yellow taxicabs that we did not take into consideration when generalizing over all taxicab trips in New York City.
+Our model is mainly limited to New York City. If we apply our model to other cities, it might not provide accurate predictions due to the difference in locations.
+
+Our data only includes the data from 2018. There are time effects that we are not taking into consideration when analyzing our data.
+
+Due to the large size of data and the limited computational power that we have, we cannot run more complicated models like neural networks, and must limit the training size of our Random Forest model.
+
+# Areas of Future Investigation:
+We would like to improve on our models further,  through investigating data and variables outside of the weather and green taxicab datasets. Some other variables and datasets that we’d like to consider for future investigation include the datasets from previous years provided in the same website, yellow cab data, and other variables that expand on the information of the passengers such as their ethnicity, genders, marital status, and more.	
+	
+If we had more time, we would have created more sophisticated models, done more literature review on the taxicab market in New York, and possibly expanded our model to include locations outside of New York City as well. 	
+	
+We would have also liked to build a model that calculated the daily profits of taxicabs in order to explore what factors most influence the profits of the taxicab market. However, because profit is Revenue - Total Cost and we lack the dataset for the cost of maintenance for the green taxicab, so we are unable to do so without further digging. 
+
+Additionaly, we would also investigate more on whether the single rider makes difference in trip fare amount and thus can offer advice to pricing strategy.
+
+
+# Shiny
+We have also created a User Interface with R Shiny that displays the distribution of taxicab demand given the time, date, and weather.
+https://xinquanwang.shinyapps.io/NYC_Green_Taxi_project/
+
+	
+# References:
+Link to Green cab data: https://data.cityofnewyork.us/Transportation/2018-Green-Taxi-Trip-Data/w7fs-fd9i
+
+Weather data: https://www.ncdc.noaa.gov/cdo-web/search
+
+Some similar project:
+
+Analyze the NYC Taxi Data https://chih-ling-hsu.github.io/2018/05/14/NYC
+
+Analyzing 1.1 Billion NYC Taxi and Uber Trips, with a Vengeance https://toddwschneider.com/posts/analyzing-1-1-billion-nyc-taxi-and-uber-trips-with-a-vengeance/
+
+The Data Science of NYC Taxi Trips: An Analysis & Visualization https://www.kdnuggets.com/2017/02/data-science-nyc-taxi-trips.html
+
+
