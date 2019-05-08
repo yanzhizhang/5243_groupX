@@ -127,4 +127,12 @@ rf.pred <- predict(rf.model, newdata=test.set[,-c("AvgRevenue")])
 sqrt(mean( (rf.pred - unlist(test.set$AvgRevenue))^2))
 ```
 
+## RandomForest on TotalAmount
+
+```{r warning=FALSE}
+rf.model<-randomForest(TotalRevenue~.,data=train.set)
+rf.pred <- predict(rf.model, newdata=test.set[,-c("TotalRevenue")])
+sqrt(mean( (rf.pred - unlist(test.set$AvgRevenue))^2))
+```
+
 

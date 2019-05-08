@@ -234,7 +234,7 @@ quantile(pruned_green$pickup_hour, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 
 ```
 Quantile for the drop-off hours
 ```{r}
-quantile(pruned_green$dropoff_hour, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1))
+quantile(pruned_green$dropoff_hour, probs = c(0, 0.005, 0.025, 0.5, 0.75, 0.975, 0.995, 1), na.rm = T)
 pruned_green <- pruned_green[pickup_hour>=0 & pickup_hour<=one.year,]
 pruned_green <- pruned_green[dropoff_hour>=0 & dropoff_hour<=one.year,]
 ```
@@ -468,6 +468,10 @@ Which judgments and assumptions did you make to produce your results? Why are th
 
 2. We can spend time in designing sophisticated models, and they usually give a better results.
 
+
+# Shiny
+
+https://xinquanwang.shinyapps.io/NYC_Green_Taxi_project/
 
 # References
 

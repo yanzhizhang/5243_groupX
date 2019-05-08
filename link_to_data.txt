@@ -1,0 +1,4 @@
+Link to Green cab data: https://data.cityofnewyork.us/api/views/w7fs-fd9i/rows.csv?accessType=DOWNLOAD
+
+
+Weather data (login required to download - State: New York - County: New York - Station: NY CITY CENTRAL PARK): https://www.ncdc.noaa.gov/cdo-web/datatools/lcd
